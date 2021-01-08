@@ -29,10 +29,7 @@ mod event_handler;
 #[cfg(feature = "gateway")]
 mod extras;
 
-pub use self::{
-    context::Context,
-    error::Error as ClientError,
-};
+pub use self::{context::Context, error::Error as ClientError};
 
 #[cfg(feature = "gateway")]
 pub use self::{
@@ -45,32 +42,34 @@ pub use crate::CacheAndHttp;
 #[cfg(feature = "cache")]
 pub use crate::cache::Cache;
 
-use crate::internal::prelude::*;
-use tokio::sync::{Mutex, RwLock};
+#[cfg(feature = "gateway")]
+use self::bridge::gateway::{
+    GatewayIntents, ShardManager, ShardManagerError, ShardManagerMonitor, ShardManagerOptions,
+};
 #[cfg(feature = "gateway")]
 use super::gateway::GatewayError;
-#[cfg(feature = "gateway")]
-use self::bridge::gateway::{GatewayIntents, ShardManager, ShardManagerMonitor, ShardManagerOptions, ShardManagerError};
-use std::{
-    boxed::Box,
-    sync::Arc,
-    future::Future,
-    pin::Pin,
-    task::{Context as FutContext, Poll},
-};
+use crate::internal::prelude::*;
 #[cfg(all(feature = "cache", feature = "gateway"))]
 use std::time::Duration;
-use tracing::{error, debug, info, instrument};
+use std::{
+    boxed::Box,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::{Context as FutContext, Poll},
+};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, error, info, instrument};
 
-#[cfg(feature = "framework")]
-use crate::framework::Framework;
-#[cfg(feature = "voice")]
-use crate::model::id::UserId;
 #[cfg(feature = "voice")]
 use self::bridge::voice::ClientVoiceManager;
+#[cfg(feature = "framework")]
+use crate::framework::Framework;
 use crate::http::Http;
-use typemap_rev::{TypeMap, TypeMapKey};
+#[cfg(feature = "voice")]
+use crate::model::id::UserId;
 use futures::future::BoxFuture;
+use typemap_rev::{TypeMap, TypeMapKey};
 
 /// A builder implementing [`Future`] building a [`Client`] to interact with Discord.
 ///
@@ -94,7 +93,6 @@ pub struct ClientBuilder<'a> {
 #[cfg(feature = "gateway")]
 impl<'a> ClientBuilder<'a> {
     /// Construct a new builder to call methods on for the client construction.
-    /// The `token` will automatically be prefixed "Bot " if not already.
     ///
     /// **Panic**:
     /// If you enabled the `framework`-feature (on by default), you must specify
@@ -116,21 +114,14 @@ impl<'a> ClientBuilder<'a> {
             framework: None,
             event_handler: None,
             raw_event_handler: None,
-        }.token(token)
+        }
+        .token(token)
     }
 
-    /// Sets a token for the bot. If the token is not prefixed "Bot ",
-    /// this method will automatically do so.
     pub fn token(mut self, token: impl AsRef<str>) -> Self {
         let token = token.as_ref().trim();
 
-        let token = if token.starts_with("Bot ") {
-            token.to_string()
-        } else {
-            format!("Bot {}", token)
-        };
-
-        self.http = Some(Http::new_with_token(&token));
+        self.http = Some(Http::new_with_token(&token.to_string()));
 
         self
     }
@@ -202,7 +193,8 @@ impl<'a> ClientBuilder<'a> {
     /// [`framework_arc`]: #method.framework_arc
     #[cfg(feature = "framework")]
     pub fn framework<F>(mut self, framework: F) -> Self
-    where F: Framework + Send + Sync + 'static,
+    where
+        F: Framework + Send + Sync + 'static,
     {
         self.framework = Some(Arc::new(Box::new(framework)));
 
@@ -216,7 +208,10 @@ impl<'a> ClientBuilder<'a> {
     ///
     /// [`framework`]: #method.framework
     #[cfg(feature = "framework")]
-    pub fn framework_arc(mut self, framework: Arc<Box<dyn Framework + Send + Sync + 'static>>) -> Self {
+    pub fn framework_arc(
+        mut self,
+        framework: Arc<Box<dyn Framework + Send + Sync + 'static>>,
+    ) -> Self {
         self.framework = Some(framework);
 
         self
@@ -292,10 +287,7 @@ impl<'a> Future for ClientBuilder<'a> {
             let intents = self.intents;
             let http = Arc::new(self.http.take().unwrap());
             #[cfg(feature = "voice")]
-            let voice_manager = Arc::new(Mutex::new(ClientVoiceManager::new(
-                0,
-                UserId(0),
-            )));
+            let voice_manager = Arc::new(Mutex::new(ClientVoiceManager::new(0, UserId(0))));
 
             let cache_and_http = Arc::new(CacheAndHttp {
                 #[cfg(feature = "cache")]
@@ -324,7 +316,8 @@ impl<'a> Future for ClientBuilder<'a> {
                         cache_and_http: &cache_and_http,
                         guild_subscriptions,
                         intents,
-                    }).await
+                    })
+                    .await
                 };
 
                 Ok(Client {
@@ -584,7 +577,7 @@ impl Client {
     ///
     /// [`Client`]: #struct.Client.html
     /// [`Future`]: https://doc.rust-lang.org/std/future/trait.Future.html
-    #[deprecated(since="0.9.0", note="please use `builder` instead")]
+    #[deprecated(since = "0.9.0", note = "please use `builder` instead")]
     #[allow(clippy::new_ret_no_self)]
     pub fn new<'a>(token: impl AsRef<str>) -> ClientBuilder<'a> {
         Self::builder(token)
@@ -811,7 +804,8 @@ impl Client {
     /// [Gateway docs]: ../gateway/index.html#sharding
     #[instrument(skip(self))]
     pub async fn start_shards(&mut self, total_shards: u64) -> Result<()> {
-        self.start_connection([0, total_shards - 1, total_shards]).await
+        self.start_connection([0, total_shards - 1, total_shards])
+            .await
     }
 
     /// Establish a range of sharded connections and start listening for events.
@@ -863,7 +857,8 @@ impl Client {
     /// [Gateway docs]: ../gateway/index.html#sharding
     #[instrument(skip(self))]
     pub async fn start_shard_range(&mut self, range: [u64; 2], total_shards: u64) -> Result<()> {
-        self.start_connection([range[0], range[1], total_shards]).await
+        self.start_connection([range[0], range[1], total_shards])
+            .await
     }
 
     /// Shard data layout is:
@@ -882,7 +877,10 @@ impl Client {
     #[instrument(skip(self))]
     async fn start_connection(&mut self, shard_data: [u64; 3]) -> Result<()> {
         #[cfg(feature = "voice")]
-        self.voice_manager.lock().await.set_shard_count(shard_data[2]);
+        self.voice_manager
+            .lock()
+            .await
+            .set_shard_count(shard_data[2]);
 
         #[cfg(feature = "voice")]
         {
@@ -900,9 +898,7 @@ impl Client {
 
             debug!(
                 "Initializing shard info: {} - {}/{}",
-                shard_data[0],
-                init,
-                shard_data[2],
+                shard_data[0], init, shard_data[2],
             );
 
             if let Err(why) = manager.initialize() {
@@ -916,8 +912,10 @@ impl Client {
         }
 
         if let Err(why) = self.shard_manager_worker.run().await {
-            let err =  match why {
-                ShardManagerError::DisallowedGatewayIntents => GatewayError::DisallowedGatewayIntents,
+            let err = match why {
+                ShardManagerError::DisallowedGatewayIntents => {
+                    GatewayError::DisallowedGatewayIntents
+                }
                 ShardManagerError::InvalidGatewayIntents => GatewayError::InvalidGatewayIntents,
                 ShardManagerError::InvalidToken => GatewayError::InvalidAuthentication,
             };

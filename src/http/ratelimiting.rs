@@ -41,24 +41,20 @@
 
 pub use super::routing::Route;
 
-use reqwest::{Client, Response};
-use reqwest::{header::HeaderMap, StatusCode};
+use super::{HttpError, Request};
 use crate::internal::prelude::*;
-use tokio::sync::{Mutex, RwLock};
+use reqwest::{header::HeaderMap, StatusCode};
+use reqwest::{Client, Response};
 use std::{
     collections::HashMap,
-    fmt,
+    fmt, i64,
+    str::{self, FromStr},
     sync::Arc,
-    str::{
-        self,
-        FromStr,
-    },
     time::SystemTime,
-    i64,
     u64,
 };
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{delay_for, Duration};
-use super::{HttpError, Request};
 use tracing::{debug, instrument};
 
 /// Ratelimiter for requests to the Discord API.
@@ -102,9 +98,6 @@ impl fmt::Debug for Ratelimiter {
 impl Ratelimiter {
     /// Creates a new ratelimiter, with a shared `reqwest` client and the
     /// bot's token.
-    ///
-    /// The bot token must be prefixed with `"Bot "`. The ratelimiter does not
-    /// prefix it.
     pub fn new(client: Arc<Client>, token: impl Into<String>) -> Self {
         Self::_new(client, token.into())
     }
@@ -179,13 +172,7 @@ impl Ratelimiter {
             // - get the global rate;
             // - sleep if there is 0 remaining
             // - then, perform the request
-            let bucket = Arc::clone(
-                &self.routes
-                    .write()
-                    .await
-                    .entry(route)
-                    .or_default()
-            );
+            let bucket = Arc::clone(&self.routes.write().await.entry(route).or_default());
 
             bucket.lock().await.pre_hook(&route).await;
 
@@ -212,7 +199,9 @@ impl Ratelimiter {
                     let _ = self.global.lock().await;
 
                     Ok(
-                        if let Some(retry_after) = parse_header::<u64>(&response.headers(), "retry-after")? {
+                        if let Some(retry_after) =
+                            parse_header::<u64>(&response.headers(), "retry-after")?
+                        {
                             debug!("Ratelimited on route {:?} for {:?}ms", route, retry_after);
                             delay_for(Duration::from_millis(retry_after)).await;
 
@@ -273,7 +262,7 @@ impl Ratelimit {
             return;
         }
 
-		let delay = match self.get_delay() {
+        let delay = match self.get_delay() {
             Some(delay) => delay,
             None => {
                 // We're probably in the past.
@@ -282,9 +271,8 @@ impl Ratelimit {
                 return;
             }
         };
-        
-        if self.remaining() == 0 {
 
+        if self.remaining() == 0 {
             debug!(
                 "Pre-emptive ratelimit on route {:?} for {}ms",
                 route,
@@ -313,7 +301,9 @@ impl Ratelimit {
             self.reset = Some(std::time::UNIX_EPOCH + Duration::from_secs_f64(reset));
         }
 
-        if let Some(reset_after) = parse_header::<f64>(&response.headers(), "x-ratelimit-reset-after")? {
+        if let Some(reset_after) =
+            parse_header::<f64>(&response.headers(), "x-ratelimit-reset-after")?
+        {
             self.reset_after = Some(Duration::from_secs_f64(reset_after));
         }
 
@@ -359,8 +349,8 @@ impl Default for Ratelimit {
         Self {
             limit: i64::MAX,
             remaining: i64::MAX,
-            reset:  None,
-            reset_after:  None,
+            reset: None,
+            reset_after: None,
         }
     }
 }
@@ -388,29 +378,22 @@ fn parse_header<T: FromStr>(headers: &HeaderMap, header: &str) -> Result<Option<
         None => return Ok(None),
     };
 
-    let unicode = str::from_utf8(&header.as_bytes()).map_err(|_| {
-        Error::from(HttpError::RateLimitUtf8)
-    })?;
+    let unicode =
+        str::from_utf8(&header.as_bytes()).map_err(|_| Error::from(HttpError::RateLimitUtf8))?;
 
-    let num = unicode.parse().map_err(|_| {
-        Error::from(HttpError::RateLimitI64F64)
-    })?;
+    let num = unicode
+        .parse()
+        .map_err(|_| Error::from(HttpError::RateLimitI64F64))?;
 
     Ok(Some(num))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        error::Error,
-        http::HttpError,
-    };
-    use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-    use std::{
-        error::Error as StdError,
-        result::Result as StdResult,
-    };
     use super::parse_header;
+    use crate::{error::Error, http::HttpError};
+    use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+    use std::{error::Error as StdError, result::Result as StdResult};
 
     type Result<T> = StdResult<T, Box<dyn StdError>>;
 
@@ -451,7 +434,10 @@ mod tests {
     fn test_parse_header_good() -> Result<()> {
         let headers = headers();
 
-        assert_eq!(parse_header::<i64>(&headers, "x-ratelimit-limit")?.unwrap(), 5);
+        assert_eq!(
+            parse_header::<i64>(&headers, "x-ratelimit-limit")?.unwrap(),
+            5
+        );
         assert_eq!(
             parse_header::<i64>(&headers, "x-ratelimit-remaining")?.unwrap(),
             4,

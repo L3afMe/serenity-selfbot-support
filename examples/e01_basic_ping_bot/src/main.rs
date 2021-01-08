@@ -41,12 +41,10 @@ impl EventHandler for Handler {
 #[tokio::main]
 async fn main() {
     // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN")
-        .expect("Expected a token in the environment");
+    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
-    // Create a new instance of the Client, logging in as a bot. This will
-    // automatically prepend your bot token with "Bot ", which is a requirement
-    // by Discord for bot users.
+    // Create a new instance of the Client, logging in as a bot. If using an
+    // actual bot account, rather than a SelfBot, prefix token with "Bot ".
     let mut client = Client::builder(&token)
         .event_handler(Handler)
         .await

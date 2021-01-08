@@ -1,3 +1,29 @@
+# Serenity SelfBot Support
+
+## Warning
+
+This is against Discord's TOS, if you get banned for being stupid
+then don't blame me ❤ Also don't expect getting help in serenity's
+Discord server and I doubt they support this :)
+
+## How to install
+
+Rather than specifying a version in Cargo.toml, specific `git = "https://github.com/L3afMe/serenity-selfbot-support"`
+
+Example:
+
+```cargo
+[dependencies.serenity]
+git = "https://github.com/L3afMe/serenity-selfbot-support"
+features = [
+    "framework",
+    "standard_framework",
+    "rustls_backend",
+]
+```
+
+# Original README
+
 [![ci-badge][]][ci] [![docs-badge][]][docs] [![guild-badge][]][guild] [![crates.io version]][crates.io link] [![rust 1.40.0+ badge]][rust 1.40.0+ link]
 
 # serenity
