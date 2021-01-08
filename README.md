@@ -4,7 +4,7 @@
 
 This is against Discord's TOS, if you get banned for being stupid
 then don't blame me ❤ Also don't expect getting help in serenity's
-Discord server and I doubt they support this :)
+Discord server as I doubt they support this :)
 
 ## How to install
 
