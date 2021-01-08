@@ -50,7 +50,7 @@ impl Http {
         let builder = configure_client_backend(Client::builder());
         let built = builder.build().expect("Cannot build reqwest::Client");
 
-        Self::new(Arc::new(built), &token.to_string)
+        Self::new(Arc::new(built), &token.to_string())
     }
 
     /// Adds a single [`Role`] to a [`Member`] in a [`Guild`].
